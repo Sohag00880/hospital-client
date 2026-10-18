@@ -1,0 +1,17 @@
+﻿node_modules/
+.next/
+.next-verify/
+out/
+.env.local
+.env*.local
+*.log
+.DS_Store
+
+/playwright-report/
+/test-results/
+
+/test-results-live/
+/test-results-patients/
+
+/test-results-appointments/
+/test-results-doctors/

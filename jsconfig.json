@@ -1,0 +1,10 @@
+﻿{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "checkJs": false
+  },
+  "include": ["src/**/*", "next.config.mjs"],
+  "exclude": ["node_modules", ".next"]
+}
