@@ -1,3 +1,2 @@
-import {PatientDueWorkspace} from "@/features/billing/BillingWorkspace";
-export const metadata={title:"Patient Due"};
-export default function Page(){return <PatientDueWorkspace/>;}
+import {redirect} from "next/navigation";
+export default function Page(){redirect("/dues/opd");}

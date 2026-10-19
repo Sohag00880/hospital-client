@@ -13,8 +13,9 @@ import { DataTable } from "@/components/ui/DataTable";
 import { useAppointmentReferencesQuery, useBookingDoctorsQuery, useBookingUsersQuery, useAppointmentsQuery, queryOptions } from "./appointmentsApi";
 import { BookingDetails } from "./BookingDetails";
 
-const money = value => `BDT ${Number(value || 0).toLocaleString("en-BD",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const formatAmount = value => Number(value || 0).toLocaleString("en-BD",{minimumFractionDigits:2,maximumFractionDigits:2});
 export function AppointmentBookingReport({byReference=false}) {
+  const money = value => `${byReference ? "" : "BDT "}${formatAmount(value)}`;
   const permissions=useAppSelector(s=>s.auth.permissions), allowed=permissions.includes("appointment.view");
   const [patientFilter,setPatientFilter]=useState("all");
   const [date,setDate]=useState(""),[ownerId,setOwnerId]=useState(""),[doctorId,setDoctorId]=useState(""),[page,setPage]=useState(1),[dialog,setDialog]=useState(null);
@@ -38,7 +39,13 @@ export function AppointmentBookingReport({byReference=false}) {
     {key:"doctor",header:"Doctor",accessor:row=>row.doctorName},
     {key:"visit",header:"Visit type",accessor:row=>row.visitType==="follow_up" ? "Follow-up" : "New"},
     {key:"amount",header:"Amount",accessor:row=>money(row.amount)},
-    {key:"reference",header:"Reference By",accessor:row=>row.referenceName || "-"},
+    ...(byReference&&permissions.includes("billing.view")?[
+      {key:"tests",header:"Test amount",accessor:row=>row.pcBill?money(row.pcBill.testAmount):"-"},
+      {key:"collected",header:"Test collected",accessor:row=>row.pcBill?money(row.pcBill.collected):"-"},
+      {key:"hospital",header:"Hospital share",accessor:row=>row.pcBill?(row.pcBill.unconfiguredOrders?"Not configured":money(row.pcBill.hospitalShare)):"-"},
+      {key:"pcBill",header:"PC Bill",accessor:row=>row.pcBill?<span className="font-semibold text-emerald-700 dark:text-emerald-400">{money(row.pcBill.pcBill)}</span>:"-"},
+    ]:[]),
+    ...(!byReference?[{key:"reference",header:"Reference By",accessor:row=>row.referenceName || "-"}]:[]),
     {key:"creator",header:"Created By",accessor:row=>row.createdByName || "-"},
     {key:"status",header:"Status",accessor:row=><span className="capitalize">{row.status.replaceAll("_"," ")}</span>},
     {key:"actions",header:"Actions",accessor:row=><div className="flex gap-2"><Button size="sm" variant="outline" onClick={()=>setDialog({type:"view",row})}>View</Button></div>},
@@ -58,6 +65,7 @@ export function AppointmentBookingReport({byReference=false}) {
         ["Refund amount",money(amounts.refunded?.amount)],
         ["Cancelled amount",money(amounts.cancelled?.amount)],
       ].map(([label,value])=><Card key={label}><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold">{records.isFetching || records.isError || doctors.isFetching || doctors.isError || !validDoctor?"—":value}</p></Card>)}</div>
+      {byReference&&permissions.includes("billing.view")&&data?.pcSummary&&<section className="space-y-3" aria-label="PC Bill totals"><h2 className="font-semibold">Reference PC Bill</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Test amount",data.pcSummary.testAmount],["Test collected",data.pcSummary.collected],["Hospital share",data.pcSummary.hospitalShare],["PC Bill",data.pcSummary.pcBill]].map(([title,value])=><Card key={title}><p className="text-sm text-muted-foreground">{title}</p><p className={`mt-2 text-xl font-semibold ${title==="PC Bill"?"text-emerald-700 dark:text-emerald-400":""}`}>{records.isFetching?"-":money(value)}</p></Card>)}</div>{data.pcSummary.unconfiguredOrders>0&&<p role="alert" className="text-sm text-amber-700">Hospital share is not configured for {data.pcSummary.unconfiguredOrders} test order(s). Set the percentage in Settings ? Configure ? PC Bill.</p>}</section>}
       {!records.isError && !doctors.isError && validDoctor && <DataTable columns={columns} rows={data?.items || []} rowKey={row=>row.id} loading={records.isFetching} emptyTitle="No appointments" />}
       {data && <div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">{data.total} appointments · Page {page}</p><div className="flex gap-2"><Button variant="outline" aria-label="Previous page" disabled={page===1 || records.isFetching} onClick={()=>setPage(value=>value-1)}><ArrowLeft className="h-4 w-4" /></Button><Button variant="outline" aria-label="Next page" disabled={page*20>=data.total || records.isFetching} onClick={()=>setPage(value=>value+1)}><ArrowRight className="h-4 w-4" /></Button></div></div>}
     </>}

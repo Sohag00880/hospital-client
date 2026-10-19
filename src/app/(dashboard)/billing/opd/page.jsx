@@ -1,3 +1,2 @@
-import {BillingWorkspace} from "@/features/billing/BillingWorkspace";
-export const metadata={title:"OPD Billing"};
-export default function Page(){return <BillingWorkspace kind="opd"/>;}
+import {redirect} from "next/navigation";
+export default function Page(){redirect("/collection-income/doctor-collection");}

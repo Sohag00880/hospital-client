@@ -5,7 +5,7 @@ export const inpatientApi=baseApi.enhanceEndpoints({addTagTypes:tags}).injectEnd
  inpatientCensus:builder.query({query:params=>({url:"/inpatient/admissions",params})}),
  inpatientChart:builder.query({query:id=>`/inpatient/admissions/${id}`,providesTags:tags}),
  inpatientBill:builder.query({query:id=>`/inpatient/admissions/${id}/bill`,providesTags:tags}),
- inpatientDue:builder.query({query:patientId=>({url:"/inpatient/due",params:{patientId}}),providesTags:tags}),
+ inpatientDue:builder.query({query:params=>({url:"/inpatient/due",params}),providesTags:tags}),
  inpatientCatalog:builder.query({query:()=>"/inpatient/charge-catalog",providesTags:tags}),
  inpatientWrite:builder.mutation({query:({path,method="POST",body})=>({url:`/inpatient/${path}`,method,body}),invalidatesTags:(_data,error)=>error?[]:tags}),
 })});

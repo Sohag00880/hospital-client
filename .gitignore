@@ -15,3 +15,6 @@ out/
 
 /test-results-appointments/
 /test-results-doctors/
+
+# Local Netlify folder
+.netlify

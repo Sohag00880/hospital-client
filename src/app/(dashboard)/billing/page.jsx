@@ -1,2 +1,2 @@
 import {redirect} from "next/navigation";
-export default function Page(){redirect("/billing/opd");}
+export default function Page(){redirect("/billing/pc");}

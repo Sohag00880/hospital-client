@@ -1,3 +1,2 @@
-import {InpatientDue} from "@/features/inpatient/InpatientDue";
-export const metadata={title:"Inpatient - Due"};
-export default function Page(){return <InpatientDue/>;}
+import {redirect} from "next/navigation";
+export default function Page(){redirect("/dues/ipd");}

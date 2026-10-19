@@ -5,8 +5,8 @@ async function install(page,{grants=fullAccess,empty=false,discharged=false}={})
  const savedCharges=[];
  const writes=[],setup={wards:empty?[]:[{id:ids.ward,name:"General Medicine",type:"General"}],rooms:empty?[]:[{id:ids.room,wardId:ids.ward,name:"Room 101"}],beds:empty?[]:[{id:ids.bed,name:"Bed A",roomId:ids.room,roomName:"Room 101",wardId:ids.ward,wardName:"General Medicine",wardType:"General",status:"available",revision:1,admissionId:discharged?null:ids.admission,patientName:discharged?null:"Ayesha Rahman",mrn:"000123"}],staff:[{id:ids.user,name:"Nurse Sara",isDoctor:false,canReceiveHandover:true},{id:ids.doctor,name:"Dr Farhan Ahmed",isDoctor:true,canReceiveHandover:false}]};
  const a={id:ids.admission,patientId:ids.patient,doctorId:ids.doctor,doctorName:"Dr Farhan Ahmed",patientName:"Ayesha Rahman",mrn:"000123",phone:"01700000000",bedId:discharged?null:ids.bed,bedName:"Bed A",wardName:"General Medicine",roomName:"Room 101",status:discharged?"discharged":"admitted",reason:"Inpatient observation and ongoing assessment",allergies:"No known drug allergies — verified with patient",emergencyContact:"Md Rahman · Husband · 01700000000",revision:1,admittedAt:new Date(Date.now()-86400000).toISOString(),dischargedAt:discharged?new Date().toISOString():null};
- const billEntries=[];
- const billSummary=()=>{const sum=kind=>billEntries.filter(e=>e.kind===kind).reduce((n,e)=>n+Math.round(Number(e.amount)*100),0);const gross=sum("charge")+sum("total_add")-sum("total_reduce")-sum("void"),discount=sum("discount"),paid=sum("payment")-sum("payment_void")-sum("refund"),net=gross-discount;return {gross:(gross/100).toFixed(2),discount:(discount/100).toFixed(2),net:(net/100).toFixed(2),paid:(paid/100).toFixed(2),due:(Math.max(0,net-paid)/100).toFixed(2),credit:(Math.max(0,paid-net)/100).toFixed(2)};};
+ const billEntries=[],expenses=[];
+ const billSummary=()=>{const sum=kind=>billEntries.filter(e=>e.kind===kind).reduce((n,e)=>n+Math.round(Number(e.amount)*100),0);const gross=sum("charge")+sum("total_add")-sum("total_reduce")-sum("void"),discount=sum("discount"),paid=sum("payment")-sum("payment_void")-sum("refund"),net=gross-discount;return {gross:(gross/100).toFixed(2),discount:(discount/100).toFixed(2),net:(net/100).toFixed(2),paid:(paid/100).toFixed(2),due:(Math.max(0,net-paid)/100).toFixed(2),expenseTotal:expenses.filter(e=>!e.replaced).reduce((n,e)=>n+Number(e.amount),0).toFixed(2),income:(paid/100-expenses.filter(e=>!e.replaced).reduce((n,e)=>n+Number(e.amount),0)).toFixed(2),credit:(Math.max(0,paid-net)/100).toFixed(2)};};
  const chart={admission:a,timeline:[]};
  let admitted=!empty;
  await page.route("**/api/v1/**",async route=>{
@@ -19,6 +19,8 @@ async function install(page,{grants=fullAccess,empty=false,discharged=false}={})
 
    if(path.endsWith("/bill/payment-edit")){const previous=billEntries.find(e=>e.id===body.paymentId);billEntries.push({...previous,id:crypto.randomUUID(),kind:"payment_void",chargeId:previous.id,description:"Payment replaced",createdAt:new Date().toISOString()});const entry={...body,id:crypto.randomUUID(),kind:"payment",author:"Nurse Sara",createdAt:new Date().toISOString()};billEntries.push(entry);return send(entry,201);}
    if(path.endsWith("/bill/total")){const delta=Number(body.amount)-Number(billSummary().net);const entry={id:crypto.randomUUID(),kind:delta>0?"total_add":"total_reduce",amount:Math.abs(delta).toFixed(2),description:"Total amount changed",author:"Nurse Sara",createdAt:new Date().toISOString()};billEntries.push(entry);return send(entry,201);}
+   if(path.endsWith("/bill/expense-edit")){const original=expenses.find(e=>e.id===body.expenseId);original.replaced=true;const saved={...body,id:crypto.randomUUID(),replacesId:original.id,replaced:false,author:"Nurse Sara",createdAt:new Date().toISOString()};expenses.push(saved);return send(saved,201);}
+   if(path.endsWith("/bill/expense")){const saved={...body,id:crypto.randomUUID(),author:"Nurse Sara",createdAt:new Date().toISOString()};expenses.push(saved);return send(saved,201);}
    if(path.includes("/bill/")){
     const kind=path.endsWith("/charge")?"charge":path.endsWith("/void")?"void":body.kind;
     const amount=kind==="charge"?(body.category==="bed"?(Number(body.unitPrice)*body.quantity).toFixed(2):body.amount):kind==="void"?billEntries.find(e=>e.id===body.chargeId).amount:body.amount;
@@ -36,7 +38,7 @@ async function install(page,{grants=fullAccess,empty=false,discharged=false}={})
    if(path==="/inpatient/admissions"){Object.assign(a,body);admitted=true;for(const item of body.initialCharges||[]){const saved=savedCharges.find(e=>e.id===item.catalogId),quantity=saved.category==="bed"?item.days:1;billEntries.push({id:crypto.randomUUID(),kind:"charge",category:saved.category,catalogId:saved.id,chargeName:saved.name,description:saved.description,quantity,unitPrice:item.price,amount:(Number(item.price)*quantity).toFixed(2),author:"Nurse Sara",createdAt:new Date().toISOString()});}return send(a,201);}
    return send(body,201);
   }
-  if(path===`/inpatient/admissions/${ids.admission}/bill`)return send({items:billEntries,summary:billSummary(),status:a.status});
+  if(path===`/inpatient/admissions/${ids.admission}/bill`)return send({items:billEntries,expenses,summary:billSummary(),status:a.status});
   if(path==="/inpatient/due")return send({items:admitted&&url.searchParams.get("patientId")===a.mrn?[{...a,billing:billSummary()}]:[]});
   if(path==="/inpatient/charge-catalog")return send(savedCharges);
   if(path==="/patients")return send({items:[{id:ids.patient,firstName:"Ayesha",lastName:"Rahman",mrn:"000123",phone:"01700000000",status:"active"}],total:1});
@@ -171,7 +173,7 @@ test("admissions can set and edit a full bill total while billing charges remain
 
 test("Due searches admission IDs and supports payment corrections with history",async({page})=>{
  await install(page);await page.goto("/inpatient");await page.getByRole("button",{name:"Add amount",exact:true}).click();let dialog=page.getByRole("dialog");await dialog.getByLabel("Total amount",{exact:true}).fill("1000.00");await dialog.getByRole("button",{name:"Save total amount",exact:true}).click();await expect(dialog).toHaveCount(0);
- await page.getByRole("navigation",{name:"Inpatient navigation"}).getByRole("link",{name:"Due",exact:true}).click();await expect(page.getByText("Find an inpatient bill",{exact:true})).toBeVisible();
+ await page.getByRole("link",{name:"IPD",exact:true}).click();await expect(page.getByText("Find an inpatient bill",{exact:true})).toBeVisible();
  await page.getByLabel("Patient ID",{exact:true}).fill("999999");await page.getByRole("button",{name:"Search",exact:true}).click();await expect(page.getByText("No admissions found",{exact:true})).toBeVisible();
  await page.getByLabel("Patient ID",{exact:true}).fill("000123");await page.getByRole("button",{name:"Search",exact:true}).click();await expect(page.getByRole("heading",{name:"Ayesha Rahman",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:/Edit amount/})).toHaveCount(0);await expect(page.getByRole("link",{name:/Open chart/i})).toHaveCount(0);
  await page.getByRole("button",{name:"Pay bill",exact:true}).click();dialog=page.getByRole("dialog");await dialog.getByLabel("Payment amount",{exact:true}).fill("400.00");await dialog.getByLabel("Payment note / reference").fill("Cash receipt");await dialog.getByRole("button",{name:"Receive payment",exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.getByText("Due",{exact:true}).locator("..").filter({hasText:"BDT 600.00"})).toHaveCount(1);
@@ -183,5 +185,23 @@ test("Due searches admission IDs and supports payment corrections with history",
  await page.getByRole("button",{name:"Add Discount",exact:true}).click();dialog=page.getByRole("dialog");await expect(dialog.getByLabel("Discount amount",{exact:true})).toHaveValue("750.00");await dialog.getByLabel("Reason for discount").fill("Remaining balance waived");await dialog.getByRole("button",{name:"Apply discount",exact:true}).click();await expect(dialog).toHaveCount(0);
  await expect(page.getByText("Due",{exact:true}).locator("..").filter({hasText:"BDT 0.00"})).toHaveCount(1);await expect(page.getByRole("button",{name:"Pay bill",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Add Discount",exact:true})).toHaveCount(0);
  await page.getByRole("button",{name:"Payment history",exact:true}).click();await expect(page.getByRole("dialog").getByText("Discount",{exact:false})).toBeVisible();
+ await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).click();
+ for(const [category,amount] of [["doctor","100.00"],["ot_assistant","50.00"],["other","25.00"]]){
+  await page.getByRole("button",{name:"Add expense",exact:true}).click();dialog=page.getByRole("dialog");await dialog.getByLabel("Expense category",{exact:true}).selectOption(category);await dialog.getByLabel("Expense amount",{exact:true}).fill(amount);await dialog.getByRole("button",{name:"Add expense",exact:true}).click();await expect(dialog).toHaveCount(0);
+ }
+ await expect(page.getByText("Total expense",{exact:true}).locator("..")).toContainText("175.00");await expect(page.getByText("Income",{exact:true}).locator("..")).toContainText("75.00");await expect(page.getByText("Due",{exact:true}).locator("..").filter({hasText:"BDT 0.00"})).toHaveCount(1);
+ await page.getByRole("button",{name:"Expense history",exact:true}).click();await expect(page.getByRole("dialog").getByText("Doctor bill",{exact:false})).toBeVisible();await expect(page.getByRole("dialog").getByText("OT assistant bill",{exact:false})).toBeVisible();await expect(page.getByRole("dialog").getByText("Others bill",{exact:false})).toBeVisible();
+ const doctorExpense=page.getByRole("dialog").locator("div.rounded-xl").filter({hasText:"Doctor bill"});await doctorExpense.getByRole("button",{name:"Edit expense",exact:true}).click();dialog=page.getByRole("dialog");await expect(dialog.getByLabel("Expense amount",{exact:true})).toHaveValue("100.00");await dialog.getByLabel("Expense amount",{exact:true}).fill("80.00");await dialog.getByRole("button",{name:"Save expense",exact:true}).click();await expect(dialog).toHaveCount(0);
+ await expect(page.getByText("Total expense",{exact:true}).locator("..")).toContainText("155.00");await expect(page.getByText("Income",{exact:true}).locator("..")).toContainText("95.00");await page.getByRole("button",{name:"Expense history",exact:true}).click();await expect(page.getByRole("dialog").getByText("Replaced by an edited expense",{exact:true})).toBeVisible();await expect(page.getByRole("dialog").getByRole("button",{name:"Edit expense",exact:true})).toHaveCount(3);
 
+
+
+});
+
+test("Settings Configure PC Bill saves a percentage and reloads it",async({page})=>{
+ await install(page,{grants:[...fullAccess,"tenant.view","tenant.update"]});let config={percentage:0,revision:0},saves=0;
+ await page.route("**/api/v1/tenant/configure/pc-bill",async route=>{if(route.request().method()==="PATCH"){const body=route.request().postDataJSON();config={percentage:body.percentage,revision:config.revision+1};saves++;}return route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,data:config})});});
+ await page.goto("/settings/configure/pc-bill");await expect(page.getByRole("button",{name:"Configure",exact:true})).toBeVisible();await expect(page.getByRole("link",{name:"PC Bill",exact:true})).toBeVisible();
+ await page.getByLabel("Reference percentage (%)",{exact:true}).fill("12.5");await page.getByRole("button",{name:"Save",exact:true}).click();await expect(page.getByRole("status")).toContainText("PC Bill percentage saved.");expect(saves).toBe(1);
+ await page.reload();await expect(page.getByLabel("Reference percentage (%)",{exact:true})).toHaveValue("12.5");await page.getByLabel("Reference percentage (%)",{exact:true}).fill("101");await page.getByRole("button",{name:"Save",exact:true}).click();expect(saves).toBe(1);
 });
