@@ -31,7 +31,7 @@ test("Appointments hides demographic/time columns and shows booking creator and 
   // Booking at 18:35 UTC is the following date in Bangladesh, independent of visit date.
   const formatted = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" }).format(new Date(createdAt));
   await expect(detail("Time & date").locator("dd")).toHaveText(`${formatted} (Bangladesh time)`);
-  await expect(dialog.getByRole("link", { name: "Full patient profile", exact: true })).toHaveAttribute("href", `/patients/${row.canonicalPatientId}`);
+  await expect(dialog.getByRole("link", { name: "Full patient profile", exact: true })).toHaveCount(0);
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
   await dialog.getByRole("button", { name: "Close", exact: true }).last().click();

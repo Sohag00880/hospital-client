@@ -10,6 +10,9 @@ test("Users references manage non-login contacts, default selection and booking 
     const send = data => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data }) });
     if (path.startsWith("/auth/")) return send({ user: { id: "11111111-1111-4111-8111-111111111111", tenantId: "22222222-2222-4222-8222-222222222222", fullName: "Reception" }, accessToken: "fixture", permissions: ["user.view", "user.create", "user.update", "appointment.view", "appointment.create", "patient.view"], roles: ["staff"], isPlatformAdmin: false });
     if (path === "/branding/appearance") return send({ displayName: "Hospital" });
+    if (path === "/locations/districts") return send([{id:"1",name:"Comilla",bnName:"কুমিল্লা"}]);
+    if (path === "/locations/upazilas") return send([{id:"1",parentId:"1",name:"Debidwar",bnName:"দেবিদ্বার"}]);
+    if (path === "/locations/unions") return send([{id:"1",parentId:"1",name:"Subil",bnName:"সুবিল"}]);
     if (method !== "GET") writes.push({ path, method, body: request.postDataJSON() });
     if (["/references", "/references/booking"].includes(path) && method === "GET") {
       const search = (url.searchParams.get("search") || "").toLowerCase();
@@ -62,9 +65,10 @@ test("Users references manage non-login contacts, default selection and booking 
   await dialog.getByLabel("Designation",{exact:true}).fill("Senior Consultant");
   await dialog.getByRole("button",{name:"Save reference",exact:true}).click();
   await expect(other).toContainText("Senior Consultant");
-  await page.getByRole("link",{name:"All Appointments",exact:true}).click();
+  await page.getByRole("link",{name:"All",exact:true}).click();
   await page.getByRole("button",{name:"Book appointment",exact:true}).click();
-  dialog = page.getByRole("dialog",{name:"Book appointment",exact:true});
+  await expect(page).toHaveURL(/\/appointments\/book/);
+  dialog = page.locator("form").filter({has:page.getByLabel("Doctor name",{exact:true})});
   await expect(dialog).toContainText("REF000001"); await expect(dialog).toContainText("Default Referral");
   const search = dialog.getByLabel("Reference (ID or name)",{exact:true});
   await search.fill("Other");
@@ -79,7 +83,9 @@ test("Users references manage non-login contacts, default selection and booking 
   await dialog.getByLabel("Patient name",{exact:true}).fill("Referred Patient");
   await dialog.getByLabel("Age (years)",{exact:true}).fill("30");
   await dialog.getByLabel("Gender",{exact:true}).selectOption("female");
+  for(const [label,name] of [["District","Comilla"],["Upazila","Debidwar"],["Union","Subil"]]){await dialog.getByRole("combobox",{name:new RegExp(`^${label}`)}).click();await dialog.getByRole("option",{name:new RegExp(name)}).click();}
   await dialog.getByRole("button",{name:"Book appointment",exact:true}).click(); await expect(dialog).toHaveCount(0);
+  await page.getByRole("link",{name:"View appointments",exact:true}).click();
   const booked = page.getByRole("row").filter({hasText:"Referred Patient"});
   await expect(booked).toContainText("Other Referral"); await expect(booked).toContainText("REF000002");
   expect(writes.find(row=>row.path==="/appointments/reception").body.referenceId).toBe(refs[1].id);

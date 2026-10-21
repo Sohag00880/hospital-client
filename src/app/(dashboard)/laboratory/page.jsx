@@ -1,3 +1,2 @@
-import { LabWorkspace } from "@/features/laboratory/LabWorkspace";
-export const metadata={title:"Laboratory"};
-export default function Page(){return <LabWorkspace />;}
+import {LabListRedirect} from "@/features/laboratory/LabListRedirect";
+export default function Page(){return <LabListRedirect/>;}

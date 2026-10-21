@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import {formatAddress} from "@/lib/address";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { bangladeshTimestamp } from "@/lib/time";
@@ -7,9 +7,10 @@ import { bangladeshTimestamp } from "@/lib/time";
 const label = value => value ? value.replaceAll("_", " ").replace(/^./, c => c.toUpperCase()) : "Not recorded";
 const stamp = value => value ? `${bangladeshTimestamp(value)} (Bangladesh time)` : "Not recorded";
 
-export function BookingDetails({ row, age, canViewProfile, onClose }) {
+export function BookingDetails({ row, age, onClose }) {
   const fields = [
     ["Patient", row.patientName], ["MRN", row.mrn], ["Phone", row.phone],
+    ["Address",formatAddress(row.address)],
     ["Age", age], ["Gender", label(row.gender)], ["Doctor", row.doctorName],
     ["Appointment date", row.date], [row.status === "pending" ? "Estimated serial" : "Serial", row.serialNumber ?? row.estimatedSerialNumber ?? "-"],
     ["Visit type", row.visitType === "follow_up" ? "Follow-up" : "New"],
@@ -27,7 +28,7 @@ export function BookingDetails({ row, age, canViewProfile, onClose }) {
   return <Modal open title="Patient and booking details" size="lg" onClose={onClose}>
     <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
       <dl className="grid gap-4 sm:grid-cols-2">{fields.map(([name, value]) => <div key={name} className="rounded-md border p-3"><dt className="text-xs font-medium text-muted-foreground">{name}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">{value === "" || value == null ? "Not recorded" : value}</dd></div>)}</dl>
-      <div className="flex flex-wrap justify-end gap-2">{canViewProfile && row.canonicalPatientId && <Link href={`/patients/${row.canonicalPatientId}`} className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-muted">Full patient profile</Link>}<Button variant="outline" onClick={onClose}>Close</Button></div>
+      <div className="flex justify-end"><Button variant="outline" onClick={onClose}>Close</Button></div>
     </div>
   </Modal>;
 }

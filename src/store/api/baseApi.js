@@ -48,6 +48,7 @@ export const baseApi = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: [
     "Billing",
+    "Inpatient",
     "Laboratory", "LabTests",
     "References",
     "Doctors", "DoctorDepartments",

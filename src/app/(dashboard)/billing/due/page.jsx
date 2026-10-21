@@ -1,2 +1,2 @@
-import {redirect} from "next/navigation";
-export default function Page(){redirect("/dues/opd");}
+import {LabDueRedirect} from "@/features/billing/LabDueRedirect";
+export default function Page(){return <LabDueRedirect/>;}

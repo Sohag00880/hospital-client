@@ -1,0 +1,3 @@
+const {defineConfig}=require("@playwright/test");
+const base=require("./playwright.config.cjs");
+module.exports=defineConfig({...base,testMatch:["appointment-patient-search.spec.js","walk-in-test-booking.spec.js","laboratory.spec.js","test-booking.spec.js","appointment-editor.spec.js","appointment-history.spec.js","appointment-confirmation.spec.js","refund-management.spec.js","appointment-management.spec.js","booking-page.spec.js","address-lists.spec.js","references.spec.js","appointments-access.spec.js"],timeout:60000,use:{...base.use,baseURL:"http://127.0.0.1:3000"},webServer:{command:"node node_modules/next/dist/bin/next dev -p 3000",url:"http://127.0.0.1:3000/login",timeout:60000,reuseExistingServer:true}});

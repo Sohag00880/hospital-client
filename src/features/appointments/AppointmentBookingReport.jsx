@@ -1,4 +1,5 @@
 "use client";
+import {formatAddress} from "@/lib/address";
 
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -36,6 +37,7 @@ export function AppointmentBookingReport({byReference=false}) {
     {key:"serial",header:"Serial",accessor:row=><span>{row.serialNumber ?? row.estimatedSerialNumber ?? "-"}{row.status === "pending" && <span className="block text-xs text-muted-foreground">Estimated</span>}</span>},
     {key:"patient",header:"Patient",accessor:row=><div><p className="font-medium">{row.patientName}</p><p className="text-xs text-muted-foreground">{row.mrn}</p></div>},
     {key:"phone",header:"Phone",accessor:row=>row.phone || "-"},
+    {key:"address",header:"Address",accessor:row=><span className="block min-w-48 max-w-xs whitespace-normal break-words">{formatAddress(row.address)}</span>},
     {key:"doctor",header:"Doctor",accessor:row=>row.doctorName},
     {key:"visit",header:"Visit type",accessor:row=>row.visitType==="follow_up" ? "Follow-up" : "New"},
     {key:"amount",header:"Amount",accessor:row=>money(row.amount)},

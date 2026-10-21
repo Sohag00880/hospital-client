@@ -17,7 +17,7 @@ test("real doctor schedule, booking, OPD queue and completion", async ({ page })
   await page.getByRole("link", {name:"All Appointments",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Appointments",exact:true})).toBeVisible();
   await expect(page.getByRole("link",{name:"OPD",exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Book appointment",exact:true}).click();let dialog=page.getByRole("dialog");
+  await page.getByRole("button",{name:"Book appointment",exact:true}).click();let dialog=page.locator("form").filter({has:page.getByLabel("Doctor name",{exact:true})});
   await dialog.getByLabel("Doctor name",{exact:true}).selectOption(process.env.E2E_DOCTOR_ID,{timeout:60000});
   await dialog.getByLabel("Phone number",{exact:true}).fill("01712345678");
   await expect(dialog.getByLabel("Visit type",{exact:true})).toHaveValue("New");
@@ -26,10 +26,12 @@ test("real doctor schedule, booking, OPD queue and completion", async ({ page })
   await dialog.getByLabel("Age (years)",{exact:true}).fill("32");
   await dialog.getByLabel("Gender",{exact:true}).selectOption("female");
   const bookingAxe=await new AxeBuilder({page}).analyze();expect(bookingAxe.violations).toEqual([]);
+  for(const [label,name] of [["District","Comilla"],["Upazila","Debidwar"],["Union","Subil"]]){await dialog.getByRole("combobox",{name:new RegExp(`^${label}`)}).click();await dialog.getByRole("searchbox",{name:`Search ${label.toLowerCase()}`}).fill(name);await dialog.getByRole("option",{name:new RegExp(name)}).click();}
   await dialog.getByRole("button",{name:"Book appointment",exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Estimated serial:");await page.getByRole("link",{name:"View appointments",exact:true}).click();
   await expect(page.getByRole("cell",{name:/Browser Reception/})).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("Estimated serial 1");
-  await page.getByRole("button",{name:"Book appointment",exact:true}).click();dialog=page.getByRole("dialog");
+
+  await page.getByRole("button",{name:"Book appointment",exact:true}).click();dialog=page.locator("form").filter({has:page.getByLabel("Doctor name",{exact:true})});
   await dialog.getByLabel("Doctor name",{exact:true}).selectOption(process.env.E2E_DOCTOR_ID,{timeout:60000});
   await dialog.getByLabel("Phone number",{exact:true}).fill("01712345678");
   await expect(dialog.getByLabel("Visit type",{exact:true})).toHaveValue("Follow-up");
@@ -48,18 +50,20 @@ test("real doctor schedule, booking, OPD queue and completion", async ({ page })
   await expect(page.getByText("No patients in this queue",{exact:true})).toBeVisible();
   await page.getByRole("link",{name:"All Appointments",exact:true}).click();
   await expect(page.getByRole("cell",{name:/^Completed/})).toBeVisible();
-  await page.getByRole("button",{name:"Book appointment",exact:true}).click();dialog=page.getByRole("dialog");
+  await page.getByRole("button",{name:"Book appointment",exact:true}).click();dialog=page.locator("form").filter({has:page.getByLabel("Doctor name",{exact:true})});
   await dialog.getByLabel("Doctor name",{exact:true}).selectOption(process.env.E2E_DOCTOR_ID,{timeout:60000});
   await dialog.getByLabel("Phone number",{exact:true}).fill("01712345678");
   await expect(dialog.getByLabel("Visit type",{exact:true})).toHaveValue("Follow-up");
   await expect(dialog.getByLabel("Amount",{exact:true})).toHaveValue("350.25");
   await expect(dialog.getByLabel("Patient name",{exact:true})).toHaveValue("Browser Reception");
   await expect(dialog.getByLabel("Age (years)",{exact:true})).toHaveValue("32");
+  for(const [label,name] of [["District","Comilla"],["Upazila","Debidwar"],["Union","Subil"]]){await dialog.getByRole("combobox",{name:new RegExp(`^${label}`)}).click();await dialog.getByRole("searchbox",{name:`Search ${label.toLowerCase()}`}).fill(name);await dialog.getByRole("option",{name:new RegExp(name)}).click();}
   await dialog.getByRole("button",{name:"Book appointment",exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Estimated serial:");await page.getByRole("link",{name:"View appointments",exact:true}).click();
   await page.getByRole("button",{name:"Confirm",exact:true}).click();
   const booked=page.getByRole("row").filter({has:page.getByRole("cell",{name:/^Booked/})});
-  await booked.getByRole("button",{name:"Edit serial",exact:true}).click();dialog=page.getByRole("dialog");
-  await dialog.getByLabel("Serial number",{exact:true}).fill("1");await dialog.getByRole("button",{name:"Save serial",exact:true}).click();await expect(dialog).toHaveCount(0);
+  await booked.getByRole("button",{name:"Edit",exact:true}).click();dialog=page.getByRole("dialog");
+  await dialog.getByLabel("Serial number",{exact:true}).fill("1");await dialog.getByRole("button",{name:"Save changes",exact:true}).click();await expect(dialog).toHaveCount(0);
   await booked.getByRole("button",{name:"Refund",exact:true}).click();dialog=page.getByRole("dialog");
   await dialog.getByLabel("Reason",{exact:true}).fill("Patient requested full refund");await dialog.getByRole("button",{name:"Refund appointment",exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("cell",{name:"Refunded",exact:true})).toBeVisible();

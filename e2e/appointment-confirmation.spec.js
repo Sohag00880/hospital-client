@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-test("pending bookings can cancel and confirmed bookings refund into a separate summary", async ({ page }) => {
+test("All confirms appointments while cancellation and refunds live in dedicated pages", async ({ page }) => {
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
   const requests = [];
   const rows = ["First Booking", "Second Booking"].map((patientName, index) => ({
@@ -20,14 +20,7 @@ test("pending bookings can cancel and confirmed bookings refund into a separate 
       const row = rows.find(row => path.startsWith(`/appointments/${row.id}/`));
       expect(row).toBeTruthy();
       expect(request.postDataJSON().expectedRevision).toBe(row.revision);
-      if(path.endsWith("/refund")) {
-        const released=row.serialNumber;
-        Object.assign(row,{status:"refunded",refundAmount:row.amount,refundedAt:new Date().toISOString(),refundReason:request.postDataJSON().reason,serialNumber:null,revision:row.revision+1});
-        for(const later of rows.filter(item=>item.serialNumber>released)) {later.serialNumber--;later.revision++;}
-        serial--;
-      } else {
-        Object.assign(row, { status: "booked", serialNumber: ++serial, revision: row.revision + 1, checkedInAt: new Date().toISOString() });
-      }
+      Object.assign(row, { status: "booked", serialNumber: ++serial, revision: row.revision + 1, checkedInAt: new Date().toISOString() });
       return send(row);
     }
     if (path === "/appointments") {
@@ -45,7 +38,7 @@ test("pending bookings can cancel and confirmed bookings refund into a separate 
   await expect(totals.getByText("1000.00", { exact: true })).toBeVisible();
   const first = page.getByRole("row").filter({ hasText: "First Booking" });
   const second = page.getByRole("row").filter({ hasText: "Second Booking" });
-  await expect(first.getByRole("button",{name:"Cancel",exact:true})).toBeVisible();
+  await expect(first.getByRole("button",{name:"Cancel",exact:true})).toHaveCount(0);
   await expect(first.getByRole("button",{name:"Refund",exact:true})).toHaveCount(0);
   await expect(first.getByText("Estimated", { exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Edit serial", exact: true })).toHaveCount(0);
@@ -53,7 +46,7 @@ test("pending bookings can cancel and confirmed bookings refund into a separate 
   await second.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(second.getByRole("cell").first()).toHaveText("1");
   await expect(second.getByRole("button",{name:"Cancel",exact:true})).toHaveCount(0);
-  await expect(second.getByRole("button",{name:"Refund",exact:true})).toBeVisible();
+  await expect(second.getByRole("button",{name:"Refund",exact:true})).toHaveCount(0);
   await expect(first.getByRole("cell").first()).toContainText("2");
   await expect(second.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
   await expect(totals.getByText("500.00", { exact: true })).toHaveCount(2);
@@ -62,18 +55,5 @@ test("pending bookings can cancel and confirmed bookings refund into a separate 
   await expect(first.getByText("Estimated", { exact: true })).toHaveCount(0);
   await expect(totals.getByText("1000.00", { exact: true })).toBeVisible();
   expect(requests).toEqual(rows.slice().reverse().map(row => `/appointments/${row.id}/confirm`));
-  await second.getByRole("button",{name:"Refund",exact:true}).click();
-  const dialog=page.getByRole("dialog");
-  await dialog.getByLabel("Reason",{exact:true}).fill("Patient requested full refund");
-  await dialog.getByRole("button",{name:"Refund appointment",exact:true}).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(totals.locator("p").filter({hasText:/^(Pending|Booked|Completed|Refund|Cancelled)$/})).toHaveText(["Pending","Booked","Completed","Refund","Cancelled"]);
-  await expect(totals.locator(":scope > div").filter({has:page.getByText("Refund",{exact:true})})).toContainText("500.00");
-  await expect(second.getByRole("button",{name:"Refund",exact:true})).toHaveCount(0);
-  await expect(second.getByRole("cell").first()).toHaveText("-");
-  await expect(second.getByRole("button",{name:"Edit serial",exact:true})).toHaveCount(0);
-  await expect(first.getByRole("cell").first()).toHaveText("1");
-  await second.getByRole("button",{name:"View",exact:true}).click();
-  const details=page.getByRole("dialog",{name:"Patient and booking details"});
-  await expect(details.locator("div.rounded-md").filter({has:page.getByText("Serial",{exact:true})}).locator("dd")).toHaveText("-");
+  await expect(page.getByRole("button",{name:"Refund",exact:true})).toHaveCount(0);
 });

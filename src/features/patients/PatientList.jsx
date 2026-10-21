@@ -1,6 +1,7 @@
 "use client";
 import {bangladeshDate,bangladeshTime,bangladeshTimestamp} from "@/lib/time";
 import { useEffect, useState } from "react";
+import {formatAddress} from "@/lib/address";
 import Link from "next/link";
 import { Users, UserPlus, Search, ArrowLeft, ArrowRight } from "lucide-react";
 import { useAppSelector } from "@/store/hooks";
@@ -30,6 +31,7 @@ export function PatientList() {
       { key: "dob", header: "Birth date", accessor: (row) => dateLabel(row.dateOfBirth) },
       { key: "sex", header: "Sex", accessor: (row) => human(row.sex) },
       { key: "phone", header: "Phone", accessor: (row) => row.phone || "Not recorded" },
+      {key:"address",header:"Address",accessor:row=><span className="block min-w-48 max-w-xs whitespace-normal break-words">{formatAddress(row.address)}</span>},
       { key: "status", header: "Status", accessor: (row) => human(row.status) },
     ]} /></div>}
     <div className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">Page {page}</span><div className="flex gap-2"><Button variant="outline" size="icon" aria-label="Previous patients" title="Previous patients" disabled={page === 1 || query.isFetching} onClick={() => setPage((value) => value - 1)}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></Button><Button variant="outline" size="icon" aria-label="Next patients" title="Next patients" disabled={query.isFetching || !data || page * 20 >= data.total} onClick={() => setPage((value) => value + 1)}><ArrowRight className="h-4 w-4" aria-hidden="true" /></Button></div></div>
