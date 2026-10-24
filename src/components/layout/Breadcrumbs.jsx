@@ -20,8 +20,7 @@ export function Breadcrumbs() {
   const crumbs = segments.map((seg, idx) => {
     const href = "/" + segments.slice(0, idx + 1).join("/");
     const patientProfile = segments[0] === "patients" && idx === 1 && /^[0-9a-f-]{36}$/i.test(seg);
-    const inpatientChart = segments[0] === "inpatient" && idx === 1 && /^[0-9a-f-]{36}$/i.test(seg);
-    return { label: inpatientChart ? "Patient chart" : patientProfile ? "Patient profile" : titleCase(seg), href };
+    return { label: patientProfile ? "Patient profile" : titleCase(seg), href };
   });
 
   return (

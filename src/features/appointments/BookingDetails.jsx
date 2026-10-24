@@ -15,6 +15,7 @@ export function BookingDetails({ row, age, onClose }) {
     ["Appointment date", row.date], [row.status === "pending" ? "Estimated serial" : "Serial", row.serialNumber ?? row.estimatedSerialNumber ?? "-"],
     ["Visit type", row.visitType === "follow_up" ? "Follow-up" : "New"],
     ["Amount", row.amount == null ? "Not recorded" : Number(row.amount).toFixed(2)],
+    ...(row.collectedAmount!=null?[["Net payment received",Number(row.collectedAmount).toFixed(2)],["Collection flow",row.collectionMode==="ledger"?"Billing payment collection":"Appointment confirmation"]]:[]),
     ["Reference By", row.referenceName], ["Reference ID", row.referenceCode],
     ["Status", label(row.status)], ["Created By", row.createdByName],
     ["Time & date", stamp(row.createdAt)],

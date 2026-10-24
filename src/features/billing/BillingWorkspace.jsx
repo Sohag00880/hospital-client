@@ -8,7 +8,7 @@ import {Button} from "@/components/ui/Button";
 import {DataTable} from "@/components/ui/DataTable";
 import {Modal} from "@/components/ui/Modal";
 import {bangladeshDate} from "@/lib/time";
-import {useBillingReportQuery,usePatientDueQuery,useDoctorLedgerQuery,useLabPaymentHistoryQuery,useEditLabPaymentMutation,useSetPatientPrintPermissionMutation} from "./billingApi";
+import {useBillingReportQuery,usePatientDueQuery,useDoctorLedgerQuery,useLabPaymentHistoryQuery,useEditLabPaymentMutation,useSetOrderPrintPermissionMutation} from "./billingApi";
 import {BillingError,Field,Summary,Pagination,PaymentForm,money,timestamp,queryOptions,paymentColumns} from "./BillingUI";
 
 function useAccess(){const permissions=useAppSelector(s=>s.auth.permissions);return {allowed:permissions.includes("billing.view"),canCollect:permissions.includes("billing.create"),canPay:permissions.includes("billing.approve")};}
@@ -37,12 +37,13 @@ export function BillingWorkspace({kind="opd"}){
   </div>;
 }
 
-function LaboratoryTable({data,busy,canCollect,onDialog,emptyTitle="No laboratory bills"}){
+function LaboratoryTable({data,busy,canCollect,onDialog,onPrintPermission,pendingPrint,permissionBusy,emptyTitle="No laboratory bills"}){
   return <DataTable rows={data?.items || []} loading={busy} rowKey={r=>r.id} emptyTitle={emptyTitle} columns={[
     {key:"order",header:"Order",accessor:r=><div><p className="font-medium">{r.orderNumber}</p><p className="whitespace-nowrap text-xs text-muted-foreground">{timestamp(r.createdAt)}</p></div>},patientColumn,
     {key:"tests",header:"Tests",accessor:r=><ul className="min-w-40 space-y-1">{r.tests.map((test,index)=><li key={index} className="text-xs">{test.name} <span className="font-medium">({money(test.amount)})</span></li>)}</ul>},
     {key:"amount",header:"Bill",align:"right",accessor:r=>money(r.amount)},{key:"discount",header:"Discount",align:"right",accessor:r=><span className="text-emerald-700">{money(r.discount)}</span>},{key:"refund",header:"Refunded",align:"right",accessor:r=>money(r.refunded)},{key:"paid",header:"Paid",align:"right",accessor:r=>money(r.paid)},
     {key:"due",header:"Due",align:"right",accessor:r=><b className={Number(r.due)>0?"text-amber-700":"text-emerald-700"}>{money(r.due)}</b>},
+    ...(onPrintPermission?[{key:"printPermission",header:"Print with due",accessor:r=><label className="inline-flex items-center gap-2 whitespace-nowrap text-xs"><input type="checkbox" aria-label={`Allow report printing with due for ${r.orderNumber}`} className="h-4 w-4 cursor-pointer accent-primary disabled:cursor-not-allowed" checked={pendingPrint?.orderId===r.id?pendingPrint.checked:!!r.allowPrintWithDue} disabled={!canCollect||busy||permissionBusy||!!pendingPrint} onChange={event=>onPrintPermission(r,event.target.checked)}/><span>Allow</span></label>}]:[]),
     {key:"actions",header:"Actions",accessor:r=><div className="flex flex-wrap gap-2">{canCollect&&Number(r.due)>0&&<Button size="sm" onClick={()=>onDialog({type:"pay",account:r})}>Collect payment</Button>}<Button size="sm" variant="outline" onClick={()=>onDialog({type:"history",account:r})}>Payment history</Button></div>},
   ]}/>;
 }
@@ -74,7 +75,8 @@ export function PatientDueWorkspace(){
     if(value==="month"){start.setUTCDate(1);}
     setFrom(start.toISOString().slice(0,10));setTo(end.toISOString().slice(0,10));setPeriod(value);setPatient("");setPage(1);
   };
-  const [setPrintPermission,permissionState]=useSetPatientPrintPermissionMutation(),[pendingPrint,setPendingPrint]=useState(null);
+  const [setPrintPermission,permissionState]=useSetOrderPrintPermissionMutation(),[pendingPrint,setPendingPrint]=useState(null);
+  const changePrintPermission=async(row,checked)=>{setPendingPrint({orderId:row.id,checked});try{await setPrintPermission({id:row.id,allowPrintWithDue:checked,expectedRevision:row.printPermissionRevision}).unwrap();setNotice(`${row.orderNumber}: report print permission ${checked?"enabled":"cancelled"}.`);}catch{}finally{setPendingPrint(null);}};
   if(!allowed)return <BillingError error="You do not have permission to view Billing."/>;
   return <div className="space-y-5"><PageHeader title="Patient Due"/>
     <Card><div className="flex flex-wrap items-center justify-end gap-3"><div className="flex flex-wrap justify-end gap-2" role="group" aria-label="Due period">{[["today","Today"],["week","Last Week"],["month","This Month"]].map(([value,label])=><Button key={value} size="sm" variant={period===value?"primary":"outline"} aria-pressed={period===value} onClick={()=>selectPeriod(value)}>{label}</Button>)}{(from || to)&&<Button size="sm" variant="ghost" onClick={()=>{setFrom("");setTo("");setPeriod("");setPage(1);}}>Clear dates</Button>}</div></div>
@@ -84,11 +86,7 @@ export function PatientDueWorkspace(){
     <BillingError error={invalid?"Select a valid date range. From date must be before or equal to To date.":showResults?query.error:null}/>{notice&&<p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
     {showResults&&!invalid&&(data || query.isFetching)&&<>
       <BillingError error={permissionState.error}/>
-      {data?.printAccess&&<Card><div className="flex items-center gap-3 text-sm"><input type="checkbox" aria-label="Allow lab report printing with due" className="h-5 w-5 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed" checked={pendingPrint?.patientId===data.patient.id?pendingPrint.checked:data.printAccess.allowPrintWithDue} disabled={!canCollect || permissionState.isLoading || Boolean(pendingPrint) || query.isFetching} onChange={async e=>{
-        const checked=e.target.checked;setPendingPrint({patientId:data.patient.id,checked});try{await setPrintPermission({id:data.patient.id,allowPrintWithDue:checked,expectedRevision:data.printAccess.revision}).unwrap();await query.refetch();setNotice(checked?"Report print permission enabled despite due.":"Report print permission cancelled.");}catch{}finally{setPendingPrint(null);}
-      }}/><span><b>Allow lab report printing with due</b></span></div></Card>}
-
-      <LaboratoryTable data={data} busy={query.isFetching} canCollect={canCollect} onDialog={setDialog} emptyTitle="No outstanding dues for this period"/><Pagination data={data} page={page} setPage={setPage} busy={query.isFetching}/>
+      <LaboratoryTable data={data} busy={query.isFetching} canCollect={canCollect} onDialog={setDialog} onPrintPermission={changePrintPermission} pendingPrint={pendingPrint} permissionBusy={permissionState.isLoading} emptyTitle="No outstanding dues for this period"/><Pagination data={data} page={page} setPage={setPage} busy={query.isFetching}/>
     </>}
     {dialog?.type==="pay"&&<PaymentForm kind="laboratory" account={dialog.account} onClose={()=>setDialog(null)} onSaved={result=>{setDialog(null);setNotice(result.discount?"Payment recorded and remaining amount discounted. Bill settled.":"Lab payment recorded. Patient due updated.");}}/>}
     {dialog?.type==="history"&&<LabHistory account={dialog.account} onClose={()=>setDialog(null)}/>}

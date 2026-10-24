@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -22,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { clearCredentials } from "@/features/auth/authSlice";
 import { useLogoutMutation } from "@/features/auth/authApi";
-import { pushToast } from "@/features/ui/uiSlice";
+import { pushToast, setSidebarCollapsed } from "@/features/ui/uiSlice";
 import { useGetAppearanceQuery } from "@/features/branding/brandingApi";
 
 const tenantNav = [
@@ -30,12 +30,14 @@ const tenantNav = [
   { label: "Doctors", href: "/doctors", icon: Stethoscope, permission:"doctor.view" },
   { label: "Patients", href: "/patients", icon: Users, permission: "patient.view" },
   { label: "Appointments", href: "/appointments", icon: CalendarDays, permission: "appointment.view", children: [{label:"All Appointments",href:"/appointments"},{label:"Appointments History",href:"/appointments/history",permission:"patient.view"},{label:"Book a Appointment",href:"/appointments/book",permission:"appointment.create"},{label:"Reschedule & Cancellation",href:"/appointments/manage",permission:"appointment.update"},{label:"By Users",href:"/appointments/by-users"},{label:"By Reference",href:"/appointments/by-reference"}] },
-  { label:"Laboratory",href:"/laboratory",icon:FlaskConical,permission:"lab.view",children:[{label:"Test List",href:"/laboratory/test-list"},{label:"Test Booking",href:"/laboratory/test-booking",permission:"lab.create"},{label:"Sample Collection",href:"/laboratory/sample-collection"},{label:"Result Entry",href:"/laboratory/result-entry"},{label:"Test Reports",href:"/laboratory/test-reports"},{label:"Test Catalog",href:"/laboratory/tests"}] },
+  { label:"Laboratory",href:"/laboratory",icon:FlaskConical,permission:"lab.view",children:[{label:"Test List",href:"/laboratory/test-list"},{label:"Test Booking",href:"/laboratory/test-booking",permission:"lab.create"},{label:"Sample Collection",href:"/laboratory/sample-collection"},{label:"Result Entry",href:"/laboratory/result-entry"},{label:"Test Reports",href:"/laboratory/test-reports"}] },
+  {label:"Diagnostic",href:"/diagnostic",icon:FlaskConical,permission:"lab.view",children:[{label:"Pathology Tests",href:"/diagnostic/pathology-tests"},{label:"Radiology Tests",href:"/diagnostic/radiology-tests"}]},
+  {label:"Radiology & Imaging",href:"/radiology-imaging",icon:FlaskConical,permission:"lab.view",children:[{label:"Radiology Test List",href:"/radiology-imaging/test-list"},{label:"Radiology Report Entry",href:"/radiology-imaging/report-entry"}]},
   { label: "OPD", href: "/opd", icon: Stethoscope, permission: "appointment.view" },
-  {label:"IPD",href:"/inpatient",icon:BedDouble,permission:"inpatient.view",children:[{label:"Admissions",href:"/inpatient"},{label:"Bed board",href:"/inpatient/beds"},{label:"Wards & rooms",href:"/inpatient/setup"},{label:"Charge catalog",href:"/inpatient/charges",permission:"billing.view"}]},
+  {label:"IPD",href:"/inpatient",icon:BedDouble,permission:"inpatient.view",children:[{label:"Admissions",href:"/inpatient"},{label:"New Admission",href:"/inpatient/new",permission:"inpatient.admit"},{label:"Bed board",href:"/inpatient/beds"},{label:"Wards & rooms",href:"/inpatient/setup"}]},
   {label:"Collection & Income",href:"/collection-income",icon:TrendingUp,permission:"billing.view",children:[{label:"Doctor Collection",href:"/collection-income/doctor-collection"},{label:"Laboratory",href:"/collection-income/laboratory"}]},
-  {label:"Billing",href:"/billing",icon:Wallet,permission:"billing.view",children:[{label:"PC",href:"/billing/pc"},{label:"Doctors",href:"/billing/doctors"},{label:"Refund Management",href:"/billing/refunds",children:[{label:"New Refund",href:"/billing/refunds/new",permission:"billing.create"},{label:"Refund History",href:"/billing/refunds/history"},{label:"Refund Approval",href:"/billing/refunds/approval",permission:"billing.approve"}]}]},
-  {label:"Dues",href:"/dues",icon:Wallet,permission:"billing.view",children:[{label:"Lab",href:"/dues/lab"},{label:"IPD",href:"/dues/ipd",permission:"inpatient.view"}]},
+  {label:"Billing",href:"/billing",icon:Wallet,permission:"billing.view",children:[{label:"IPD Billing",href:"/billing/ipd",permission:"inpatient.view",children:[{label:"IPD Bill Management",href:"/billing/ipd"},{label:"Advance & Deposit",href:"/billing/ipd/deposits"},{label:"Payments & Due",href:"/billing/ipd/payments"},{label:"Service Charges",href:"/billing/ipd/services"},{label:"Final Bill & Discharge",href:"/billing/ipd/final"},{label:"IPD Billing Reports",href:"/billing/ipd/reports"}]},{label:"PC",href:"/billing/pc"},{label:"Doctors",href:"/billing/doctors"},{label:"Refund Management",href:"/billing/refunds",children:[{label:"New Refund",href:"/billing/refunds/new",permission:"billing.create"},{label:"Refund History",href:"/billing/refunds/history"},{label:"Refund Approval",href:"/billing/refunds/approval",permission:"billing.approve"}]}]},
+  {label:"Dues",href:"/dues",icon:Wallet,permission:"billing.view",children:[{label:"Lab",href:"/dues/lab"}]},
   { label: "Users", href: "/users", icon: Users, permission: "user.view", children: [{label:"Employee",href:"/users"},{label:"Reference",href:"/users/references"}] },
   { label: "Roles", href: "/roles", icon: Shield, permission: "role.view" },
   { label: "Settings", href: "/settings", icon: Settings, permission: "tenant.view", children:[{label:"General",href:"/settings"},{label:"Configure",href:"/settings/configure",children:[{label:"PC Bill",href:"/settings/configure/pc-bill"}]}] },
@@ -47,6 +49,15 @@ export function Sidebar() {
   const permissions = useAppSelector((s) => s.auth.permissions);
   const user = useAppSelector((s) => s.auth.user);
   const dispatch = useAppDispatch();
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 767px)");
+    const collapseOnNarrowScreen = () => {
+      if (narrow.matches) dispatch(setSidebarCollapsed(true));
+    };
+    collapseOnNarrowScreen();
+    narrow.addEventListener("change", collapseOnNarrowScreen);
+    return () => narrow.removeEventListener("change", collapseOnNarrowScreen);
+  }, [dispatch]);
   const router = useRouter();
   const pathname = usePathname();
   const [openMenus, setOpenMenus] = useState({"/collection-income":true,"/dues":true,"/settings":true,"/settings/configure":true,"/inpatient":true,"/users":true,"/appointments":true,"/laboratory":true,"/billing":true,"/billing/refunds":true});

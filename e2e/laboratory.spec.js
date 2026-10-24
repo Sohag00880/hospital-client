@@ -1,16 +1,22 @@
 const {test,expect}=require("@playwright/test");
 const AxeBuilder=require("@axe-core/playwright").default;
 const patientId="11111111-1111-4111-8111-111111111111",testId="22222222-2222-4222-8222-222222222222",orderId="33333333-3333-4333-8333-333333333333",sampleId="44444444-4444-4444-8444-444444444444",itemId="55555555-5555-4555-8555-555555555555",parameterId="66666666-6666-4666-8666-666666666666";
-async function install(page,grants,{due=0,parameters,multiple=false,newBooking=false}={}){
+async function install(page,grants,{due=0,parameters,multiple=false,newBooking=false,diagnostic=false,multipleDue=false}={}){
   const catalog=[{id:testId,amount:"450.25",code:"TEST",name:"Configured Test",specimenType:"blood",parameters:parameters||[{id:parameterId,label:"Configured parameter",type:"numeric",unit:"unit",referenceRange:"Configured range"}],active:true,revision:1}];
+  if(diagnostic)catalog.push({id:"77777777-7777-4777-8777-777777777777",category:"radiology",amount:"500.00",code:"USG",name:"USG Abdomen",specimenType:"usg",active:true,revision:1,parameters:[{id:"77777777-7777-4777-8777-777777777778",label:"Findings",type:"text",unit:"",referenceRange:""},{id:"77777777-7777-4777-8777-777777777779",label:"Impression",type:"text",unit:"",referenceRange:""}]});
   const patient={id:patientId,mrn:"000001",name:"Lab Patient",firstName:"Lab",lastName:"Patient"};
-  const writes=[],patches=[];let order=null,allowPrintWithDue=false,revision=0;
+  const writes=[],patches=[];let order=null,allowPrintWithDue=false,revision=0,otherAllowed=false,otherRevision=0;
   const access=()=>({patientId,due:due.toFixed(2),allowPrintWithDue,revision,canPrint:due===0 || allowPrintWithDue});
   await page.route("**/api/v1/**",async route=>{
     const req=route.request(),url=new URL(req.url()),path=url.pathname.replace(/^.*\/api\/v1/,"");
     const send=(data,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify({success:status<400,data})});
-    if(path===`/billing/patients/${patientId}/print-permission`){const body=req.postDataJSON();allowPrintWithDue=body.allowPrintWithDue;revision++;writes.push(path);return send(access());}
-    if(path==="/billing/due")return send({patient:{id:patientId,mrn:patient.mrn,name:patient.name},summary:{amount:"450.25",paid:(450.25-due).toFixed(2),due:due.toFixed(2)},items:[],total:0,page:1,pageSize:20,printAccess:access()});
+    if(path===`/billing/laboratory/${orderId}/print-permission`){const body=req.postDataJSON();allowPrintWithDue=body.allowPrintWithDue;revision++;writes.push(path);return send(access());}
+    if(path===`/billing/laboratory/99999999-9999-4999-8999-999999999999/print-permission`){const body=req.postDataJSON();otherAllowed=body.allowPrintWithDue;otherRevision++;writes.push(path);return send({allowPrintWithDue:otherAllowed,revision:otherRevision});}
+    if(path==="/billing/due"){
+      const row={id:orderId,orderNumber:'LAB00000001',createdAt:'2026-10-17T06:00:00Z',orderedOn:'2026-10-17',status:order?.status||'ordered',patientId,mrn:patient.mrn,patientName:patient.name,amount:'450.25',paid:(450.25-due).toFixed(2),due:due.toFixed(2),discount:'0.00',refunded:'0.00',tests:[{name:'Configured Test',amount:'450.25'}],allowPrintWithDue,printPermissionRevision:revision};
+      const items=multipleDue?[row,{...row,id:'99999999-9999-4999-8999-999999999999',orderNumber:'LAB00000002',allowPrintWithDue:otherAllowed,printPermissionRevision:otherRevision}]:[row];
+      return send({patient:{id:patientId,mrn:patient.mrn,name:patient.name},summary:{amount:'450.25',paid:(450.25-due).toFixed(2),due:due.toFixed(2)},items,total:items.length,page:1,pageSize:20});
+    }
     if(path.startsWith("/auth/"))return send({user:{id:patientId,tenantId:testId,fullName:"Lab Staff"},accessToken:"fixture",permissions:grants,roles:["staff"],isPlatformAdmin:false});
     if(path==="/branding/appearance")return send({displayName:"Test Hospital"});
     if(path==="/patients")return send({items:[patient],total:1,page:1,pageSize:10});
@@ -20,11 +26,11 @@ async function install(page,grants,{due=0,parameters,multiple=false,newBooking=f
     }
     if(path==="/laboratory/orders"){
       if(req.method()==="POST"){
-        const body=req.postDataJSON();writes.push(path);expect(body.patientId).toBe(patientId);expect(body.testIds).toEqual([testId]);
-        order={id:orderId,orderNumber:"LAB00000001",orderedOn:"2026-10-17",patient,status:"ordered",priority:body.priority,revision:1,notes:body.notes,createdAt:"2026-10-17T06:00:00Z",samples:[{id:sampleId,specimenType:"blood",collectedAt:null,barcode:null}],items:[{id:itemId,testId,sampleId,testSnapshot:catalog[0],results:[],resultNotes:""}],events:[]};return send(order,201);
+        const body=req.postDataJSON();writes.push(path);expect(body.patientId).toBe(patientId);expect(body.testIds).toEqual(diagnostic?[testId,catalog[1].id]:[testId]);
+        order={id:orderId,orderNumber:"LAB00000001",orderedOn:"2026-10-17",patient,status:"ordered",priority:body.priority,revision:1,notes:body.notes,createdAt:"2026-10-17T06:00:00Z",samples:[{id:sampleId,specimenType:"blood",collectedAt:null,barcode:null}],items:[{id:itemId,testId,sampleId,testSnapshot:catalog[0],results:[],resultNotes:""}],events:[]};if(diagnostic)order.items.push({id:"88888888-8888-4888-8888-888888888888",testId:catalog[1].id,sampleId:null,testSnapshot:catalog[1],results:[],resultNotes:""});return send(order,201);
       }
       const pending=order?.items.filter(item=>!item.resultCompletedAt).length||0,mode=url.searchParams.get('worklist');
-      const visible=order&&(!mode||mode==='collection'&&order.status==='ordered'||mode==='results'&&order.status!=='ordered'&&pending>0||mode==='reports'&&pending===0);
+      const visible=order&&(!mode||mode==='collection'&&order.status==='ordered'||mode==='results'&&order.status!=='ordered'&&pending>0||mode==='reports'&&pending===0||mode==='radiology'&&order.items.some(item=>item.testSnapshot.category==='radiology'));
       return send({items:visible?[{...order,patientName:patient.name,mrn:patient.mrn,collectedBy:'Lab Collector',totalItems:order.items.length,pendingResults:pending}]:[],total:visible?1:0,page:1,pageSize:20,counts:visible?{[order.status]:1}:{}});
     }
     if(path===`/laboratory/orders/${orderId}`&&req.method()==='GET')return send({...order,canEdit:order.status==='ordered'&&!order.samples.some(sample=>sample.collectedAt),patientCreatedForOrder:newBooking,printAccess:access()});
@@ -42,7 +48,14 @@ async function install(page,grants,{due=0,parameters,multiple=false,newBooking=f
     if(path===`/laboratory/orders/${orderId}/item-report`){
       if(!access().canPrint)return route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({success:false,error:{message:"Report printing is blocked: patient lab due remains."}})});
       const ids=url.searchParams.get('itemIds').split(',');
-      return send({kind:'report',report:{...order,reportTitle:'Laboratory Test Report',hospital:{displayName:'Test Hospital',address:'Test address'},items:ids.map(id=>order.items.find(item=>item.id===id)),recordedByName:'Lab Staff',recordedAt:'2026-10-17T06:25:00Z',billing:{due:due.toFixed(2),allowPrintWithDue}}});
+      return send({kind:'report',report:{...order,reportTitle:diagnostic?'Radiology Report':'Laboratory Test Report',hospital:{displayName:'Test Hospital',address:'Test address'},items:ids.map(id=>order.items.find(item=>item.id===id)),recordedByName:'Lab Staff',recordedAt:'2026-10-17T06:25:00Z',billing:{due:due.toFixed(2),allowPrintWithDue}}});
+    }
+    if(path==='/laboratory/radiology-bookings'){
+      let rows=(order?.items||[]).filter(item=>item.testSnapshot.category==='radiology').map(item=>({id:item.id,orderId:order.id,orderNumber:order.orderNumber,orderedOn:order.orderedOn,revision:order.revision,patientName:patient.name,mrn:patient.mrn,phone:'01712345678',testName:item.testSnapshot.name,code:item.testSnapshot.code,modality:item.testSnapshot.specimenType,amount:item.testSnapshot.amount,bookingStatus:item.radiologyBookingStatus||'booked',resultCompletedAt:item.resultCompletedAt}));
+      if(url.searchParams.get('bookingStatus'))rows=rows.filter(row=>row.bookingStatus===url.searchParams.get('bookingStatus'));return send({items:rows,total:rows.length,page:1,pageSize:20});
+    }
+    if(path.endsWith('/booking-status')&&req.method()==='PATCH'){
+      const body=req.postDataJSON(),item=order.items.find(item=>path.includes(item.id));expect(body.expectedRevision).toBe(order.revision);writes.push(path);order.revision++;item.radiologyBookingStatus=body.status;return send(order);
     }
     if(path.includes(`/laboratory/orders/${orderId}/items/`)&&req.method()==='PUT'){const body=req.postDataJSON(),item=order.items.find(item=>path.includes(item.id));expect(body.expectedRevision).toBe(item.resultRevision||1);item.results=body.results;item.resultNotes=body.notes;item.resultRevision=(item.resultRevision||1)+1;item.resultCompletedAt=body.complete?'2026-10-17T06:25:00Z':null;order.status=order.items.every(i=>i.resultCompletedAt)?'result_entered':'processing';order.revision++;writes.push(path);return send(order);}
     if(order&&path.startsWith(`/laboratory/orders/${orderId}/`)&&req.method()!=="GET"){
@@ -140,21 +153,22 @@ test("patient due blocks report printing until billing checkbox grants permissio
   await page.addInitScript(()=>{window.print=()=>window.parent.postMessage({type:"test-lab-printed"},"*");});
   const fixture=await install(page,["lab.view","lab.export","billing.view","billing.create"],{due:450.25});fixture.setFinalized();
   await page.goto("/laboratory/test-reports");await page.getByRole("button",{name:"Print / Edit",exact:true}).click();
+  await expect(page).toHaveURL(new RegExp(`/laboratory/result-entry/${orderId}`),{timeout:30000});
   await expect(page.getByRole("button",{name:"Print test",exact:true})).toBeDisabled();
-  await expect(page.getByText(/Report printing is blocked. Patient lab due:/)).toBeVisible();
+  await expect(page.getByText(/Report printing is blocked. Booking due:/)).toBeVisible();
   await page.goto("/dues/lab");await page.getByLabel("Search patient").fill("000001");await page.getByRole("button",{name:"Search due"}).click();
-  const checkbox=page.getByRole("checkbox",{name:/Allow lab report printing with due/});await checkbox.check();await expect(checkbox).toBeChecked();
-  await expect(page.getByRole("status").filter({hasText:"Report print permission enabled despite due."})).toBeVisible();
+  const checkbox=page.getByRole("checkbox",{name:/Allow report printing with due for LAB00000001/});await checkbox.check();await expect(checkbox).toBeChecked();
+  await expect(page.getByRole("status").filter({hasText:"LAB00000001: report print permission enabled."})).toBeVisible();
   await checkbox.uncheck();await expect(checkbox).not.toBeChecked();
-  await expect(page.getByRole("status").filter({hasText:"Report print permission cancelled."})).toBeVisible();
-  await checkbox.check();await expect(page.getByRole("status").filter({hasText:"Report print permission enabled despite due."})).toBeVisible();
+  await expect(page.getByRole("status").filter({hasText:"LAB00000001: report print permission cancelled."})).toBeVisible();
+  await checkbox.check();await expect(page.getByRole("status").filter({hasText:"LAB00000001: report print permission enabled."})).toBeVisible();
   await page.goto("/laboratory/test-reports");await page.getByRole("button",{name:"Print / Edit",exact:true}).click();await page.getByRole("button",{name:"Print test",exact:true}).click();
-  const frame=page.frameLocator('iframe[title="Laboratory print document"]');await expect(frame.getByText("Outstanding patient lab due: 450.25",{exact:true})).toBeVisible();
+  const frame=page.frameLocator('iframe[title="Laboratory print document"]');await expect(frame.getByText("Outstanding booking due: 450.25",{exact:true})).toBeVisible();
   await page.evaluate(()=>{window.addEventListener("message",event=>{if(event.data?.type==="test-lab-printed")window.labPrinted=true;});});
   await page.getByRole("button",{name:"Print / Save PDF",exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.labPrinted)).toBe(true);
   // A separate cashier revokes permission while this report preview is open.
-  await page.evaluate(async({patientId})=>{await fetch(`/api/v1/billing/patients/${patientId}/print-permission`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({allowPrintWithDue:false,expectedRevision:3})});},{patientId});
+  await page.evaluate(async({orderId})=>{await fetch(`/api/v1/billing/laboratory/${orderId}/print-permission`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({allowPrintWithDue:false,expectedRevision:3})});},{orderId});
   await page.getByRole("button",{name:"Print / Save PDF",exact:true}).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Report printing is blocked");
   await expect(page.locator('iframe[title="Laboratory print document"]')).toHaveCount(0);
@@ -212,4 +226,49 @@ test("ordered existing patient bookings allow only test selection and lock after
 });
 test("patients registered at booking can edit demographics and booking details",async({page})=>{
  const setup=await install(page,["lab.view","lab.update","patient.view","patient.update"],{newBooking:true});setup.setOrdered();await page.goto('/laboratory/test-list');await page.getByRole('button',{name:'Edit',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('First name',{exact:true}).fill('Updated');await dialog.getByLabel('Phone number',{exact:true}).fill('01812345678');await dialog.getByLabel('Priority',{exact:true}).selectOption('urgent');await dialog.getByRole('checkbox',{name:/Additional test/}).check();await dialog.getByRole('button',{name:'Save changes',exact:true}).click();await expect(dialog).toHaveCount(0);expect(setup.patches[0].patient).toMatchObject({firstName:'Updated',phone:'01812345678',expectedRevision:1});expect(setup.patches[0].priority).toBe('urgent');expect(setup.patches[0].testIds).toHaveLength(2);
+});
+
+test("diagnostic booking uses one list and radiology reports bypass specimen collection",async({page})=>{
+ test.setTimeout(120000);
+ await install(page,["lab.view","lab.create","lab.update","lab.export","patient.view"],{diagnostic:true});
+ await page.goto('/laboratory/test-booking');const main=page.getByRole('main');
+ await expect(main.getByRole('tab')).toHaveCount(0);
+ await main.getByLabel('Find patient',{exact:true}).fill('Lab');await main.getByRole('button',{name:/Lab Patient.*000001/}).click();
+ await main.getByRole('checkbox',{name:/Configured Test/}).check();await main.getByRole('checkbox',{name:/USG Abdomen/}).check();
+ await expect(main.getByText('BDT 950.25',{exact:true})).toBeVisible();await main.getByRole('button',{name:'Book tests',exact:true}).click();
+ await expect(main.getByRole('heading',{name:'Test booking successful'})).toBeVisible();
+ await page.goto('/radiology-imaging/report-entry');await page.getByRole('button',{name:'Open results',exact:true}).click();
+ await expect(page).toHaveURL(/radiology-imaging\/report-entry\/[a-f0-9-]+$/,{timeout:30000});
+ await expect(main.getByRole('button',{name:'Entry Result',exact:true})).toHaveCount(1);await expect(main.getByText('Configured Test',{exact:true})).toHaveCount(0);
+ await main.getByRole('button',{name:'Entry Result',exact:true}).click();const modal=page.getByRole('dialog');
+ await modal.getByLabel('USG Abdomen: Findings',{exact:true}).fill('Normal study.');await modal.getByLabel('USG Abdomen: Impression',{exact:true}).fill('No abnormality detected.');
+ await modal.getByRole('button',{name:'Save result',exact:true}).click();await expect(modal).toHaveCount(0);
+ await main.getByRole('button',{name:'Print test',exact:true}).click();const frame=page.frameLocator('iframe[title="Laboratory print document"]');
+ await expect(frame.getByRole('heading',{name:'Radiology Report',exact:true})).toBeVisible();await expect(frame.getByRole('heading',{name:'Findings',exact:true})).toBeVisible();await expect(frame.getByText('Normal study.',{exact:true})).toBeVisible();await expect(frame.getByRole('table')).toHaveCount(0);
+});
+
+test("test list actions stay alongside and View shows booking details without editing",async({page})=>{
+ test.setTimeout(120000);const setup=await install(page,["lab.view","lab.update","lab.export"]);setup.setOrdered();
+ await page.goto('/laboratory/test-list');const main=page.getByRole('main'),view=main.getByRole('button',{name:'View',exact:true}),edit=main.getByRole('button',{name:'Edit',exact:true}),print=main.getByRole('button',{name:'Print',exact:true});
+ await expect(view).toBeVisible();const boxes=await Promise.all([view,edit,print].map(button=>button.boundingBox()));expect(boxes.every(box=>Math.abs(box.y-boxes[0].y)<2)).toBe(true);expect(boxes[0].x).toBeLessThan(boxes[1].x);expect(boxes[1].x).toBeLessThan(boxes[2].x);
+ await view.click();const modal=page.getByRole('dialog',{name:'Booking details / LAB00000001'});await expect(modal.getByRole('heading',{name:'Lab Patient',exact:true})).toBeVisible();await expect(modal.getByText('01712345678',{exact:true})).toBeVisible();await expect(modal.getByRole('region',{name:'Booked tests'}).getByText('Configured Test',{exact:true})).toBeVisible();await expect(modal.getByText('Awaiting sample',{exact:true})).toBeVisible();await expect(modal.getByRole('textbox')).toHaveCount(0);await modal.getByRole('button',{name:'Close',exact:true}).last().click();await expect(modal).toHaveCount(0);expect(setup.writes).toHaveLength(0);
+});
+
+test("radiology menu separates booking status management from unchanged report entry",async({page})=>{
+ test.setTimeout(120000);const setup=await install(page,["lab.view","lab.create","lab.update","lab.export","patient.view"],{diagnostic:true});
+ await page.goto('/laboratory/test-booking');const main=page.getByRole('main');await main.getByLabel('Find patient',{exact:true}).fill('Lab');await main.getByRole('button',{name:/Lab Patient.*000001/}).click();await main.getByRole('checkbox',{name:/Configured Test/}).check();await main.getByRole('checkbox',{name:/USG Abdomen/}).check();await main.getByRole('button',{name:'Book tests',exact:true}).click();await expect(main.getByRole('heading',{name:'Test booking successful'})).toBeVisible();
+ await page.goto('/radiology-imaging/test-list');await expect(main.getByRole('heading',{name:'Radiology Test List',exact:true})).toBeVisible();await expect(main.getByText('Configured Test',{exact:true})).toHaveCount(0);
+ await main.getByLabel('Status for USG Abdomen',{exact:true}).selectOption('in_progress');await main.getByRole('button',{name:'Save status',exact:true}).click();await expect(main.getByRole('cell',{name:'In Progress',exact:true})).toBeVisible();
+ await main.getByLabel('Status for USG Abdomen',{exact:true}).selectOption('completed');await main.getByRole('button',{name:'Save status',exact:true}).click();await expect(main.getByRole('cell',{name:'Completed',exact:true})).toBeVisible();
+ await main.getByRole('button',{name:'Open Report',exact:true}).click();await expect(page).toHaveURL(/radiology-imaging\/report-entry\/[a-f0-9-]+$/,{timeout:30000});await expect(main.getByRole('button',{name:'Entry Result',exact:true})).toBeEnabled();await expect(main.getByRole('button',{name:'Mark as Performed',exact:true})).toHaveCount(0);await expect(main.getByRole('button',{name:'Mark Report Delivered',exact:true})).toHaveCount(0);
+ await page.goto('/laboratory/test-list');await main.getByRole('button',{name:'View',exact:true}).click();const modal=page.getByRole('dialog',{name:/Booking details/});await expect(modal.getByRole('button',{name:/Mark/})).toHaveCount(0);expect(setup.writes.filter(path=>path.endsWith('/booking-status'))).toHaveLength(2);
+});
+
+test("due table grants report printing per Lab ID for repeated bookings under the same MRN",async({page})=>{
+ test.setTimeout(120000);const setup=await install(page,["billing.view","billing.create"],{due:450.25,multipleDue:true});
+ await page.goto('/dues/lab');await page.getByLabel('Search patient').fill('000001');await page.getByRole('button',{name:'Search due',exact:true}).click();
+ const first=page.getByRole('checkbox',{name:'Allow report printing with due for LAB00000001',exact:true}),second=page.getByRole('checkbox',{name:'Allow report printing with due for LAB00000002',exact:true});
+ await expect(page.getByRole('checkbox',{name:'Allow lab report printing with due',exact:true})).toHaveCount(0);await expect(first).not.toBeChecked();await expect(second).not.toBeChecked();
+ await first.check();await expect(first).toBeChecked();await expect(second).not.toBeChecked();expect(setup.writes.at(-1)).toBe(`/billing/laboratory/${orderId}/print-permission`);
+ await second.check();await expect(second).toBeChecked();await first.uncheck();await expect(first).not.toBeChecked();await expect(second).toBeChecked();
 });

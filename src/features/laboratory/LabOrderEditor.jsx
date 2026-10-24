@@ -24,7 +24,7 @@ function Editor({order,onClose,onPending}){
  const [person,setPerson]=useState({firstName:order.patient.firstName||order.patient.name,lastName:order.patient.lastName||"",phone:order.patient.phone||"",ageYears:ageFor(order.patient),sex:order.patient.sex||"unknown"});
  const [address,setAddress]=useState({districtId:order.address?.district?.id||"",upazilaId:order.address?.upazila?.id||"",unionId:order.address?.union?.id||"",village:order.address?.village||""});
  const [source,setSource]=useState(order.bookingSource==="appointment"?"appointment":"walk_in"),[appointmentId,setAppointment]=useState(order.appointmentId||""),[priority,setPriority]=useState(order.priority),[notes,setNotes]=useState(order.notes||""),[referredDoctor,setDoctor]=useState(order.referredDoctor||"");
- const catalog=useLabTestsQuery({active:"true"},labQueryOptions),appointments=usePatientAppointmentHistoryQuery({patient:order.patient.mrn,pageSize:50},{skip:!isNew||source!=="appointment"||!permissions.includes("appointment.view")});
+ const catalog=useLabTestsQuery({active:"true",category:"all"},labQueryOptions),appointments=usePatientAppointmentHistoryQuery({patient:order.patient.mrn,pageSize:50},{skip:!isNew||source!=="appointment"||!permissions.includes("appointment.view")});
  const [save,state]=useEditLabOrderMutation();
  useEffect(()=>{onPending(state.isLoading);return()=>onPending(false);},[state.isLoading,onPending]);
  const original=new Map(order.items.map(item=>[item.testId,item]));

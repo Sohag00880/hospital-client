@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {Pencil,Printer} from "lucide-react";
+import {Pencil,Printer,Eye} from "lucide-react";
 import {bangladeshDate,bangladeshTime} from "@/lib/time";
 import {useAppSelector} from "@/store/hooks";
 import {PageHeader} from "@/components/layout/PageHeader";
@@ -13,6 +13,7 @@ import {DataTable} from "@/components/ui/DataTable";
 import {useLabOrdersQuery,labQueryOptions} from "./laboratoryApi";
 import {LabError,LabField,StageBadge,stages,stageLabel} from "./LabUI";
 import {bookingSourceLabel} from "./TestBookingSource";
+import {LabOrderDetails} from "./LabOrderDetails";
 import {LabOrderEditor} from "./LabOrderEditor";
 import {LabDocument} from "./LabDocument";
 export function LabTestList(){
@@ -32,8 +33,9 @@ export function LabTestList(){
       {key:"source",header:"Source",accessor:row=><div><p className="text-sm">{bookingSourceLabel(row.bookingSource)}</p>{row.referredDoctor&&<p className="mt-1 text-xs text-muted-foreground">Dr / Ref: {row.referredDoctor}</p>}</div>},
       {key:"date",header:"Order date",accessor:row=>row.orderedOn},{key:"orderedTime",header:"Ordered time",accessor:row=>row.createdAt?bangladeshTime(row.createdAt):"-"},
       {key:"amount",header:"Amount",accessor:row=>Number(row.totalAmount ?? 0).toLocaleString("en-BD",{minimumFractionDigits:2,maximumFractionDigits:2})},{key:"priority",header:"Priority",accessor:row=><span className={row.priority==="urgent"?"font-semibold text-destructive":"capitalize"}>{row.priority}</span>},
-      {key:"stage",header:"Stage",accessor:row=><StageBadge status={row.status}/>},{key:"actions",header:"Actions",accessor:row=><div className="flex flex-wrap gap-2">{canEdit&&<Button size="sm" variant="outline" disabled={row.status!=="ordered"||row.canEdit===false||query.isFetching} title={row.status!=="ordered"||row.canEdit===false?"Editing is available only before sample collection":"Edit test booking"} onClick={()=>setDialog({type:"edit",id:row.id})}><Pencil className="h-3.5 w-3.5"/>Edit</Button>}{canExport&&<Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800" onClick={()=>setDialog({type:"print",id:row.id})}><Printer className="h-3.5 w-3.5" />Print</Button>}</div>},
+      {key:"stage",header:"Stage",accessor:row=><StageBadge status={row.status}/>},{key:"actions",header:"Actions",accessor:row=><div className="flex w-max flex-nowrap items-center gap-2 whitespace-nowrap [&>button]:shrink-0"><Button size="sm" variant="outline" onClick={()=>setDialog({type:"view",id:row.id})}><Eye className="h-3.5 w-3.5"/>View</Button>{canEdit&&<Button size="sm" variant="outline" disabled={row.status!=="ordered"||row.canEdit===false||query.isFetching} title={row.status!=="ordered"||row.canEdit===false?"Editing is available only before sample collection":"Edit test booking"} onClick={()=>setDialog({type:"edit",id:row.id})}><Pencil className="h-3.5 w-3.5"/>Edit</Button>}{canExport&&<Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800" onClick={()=>setDialog({type:"print",id:row.id})}><Printer className="h-3.5 w-3.5" />Print</Button>}</div>},
     ]}/><div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">{data?.total ?? 0} orders · Page {page}</p><div className="flex gap-2"><Button variant="outline" disabled={page===1 || query.isFetching} onClick={()=>setPage(value=>value-1)}>Previous</Button><Button variant="outline" disabled={!data || page*20>=data.total || query.isFetching} onClick={()=>setPage(value=>value+1)}>Next</Button></div></div>
+    {dialog?.type==="view"&&<LabOrderDetails id={dialog.id} onClose={()=>setDialog(null)}/>}
     {dialog?.type==="edit"&&<LabOrderEditor id={dialog.id} onClose={()=>setDialog(null)}/>}
     {dialog?.type==="print"&&<LabDocument id={dialog.id} kind="order" closeLabel="Close" onClose={()=>setDialog(null)}/>}
   </div>;

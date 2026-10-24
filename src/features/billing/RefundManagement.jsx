@@ -12,7 +12,7 @@ import {Modal} from "@/components/ui/Modal";
 import {BillingError,money,timestamp,Pagination,queryOptions} from "./BillingUI";
 import {useRefundBillsQuery,useRefundHistoryQuery,useCreateRefundMutation,useDecideRefundMutation} from "./refundsApi";
 
-const sources={opd:"OPD",ipd:"IPD",lab:"Lab"};
+const sources={opd:"OPD",lab:"Lab"};
 const sourceLabel=value=>sources[value==="appointment"?"opd":value];
 const primary="bg-blue-700 text-white hover:bg-blue-800";
 function Field({label,children}){const id=useId();return <div className="space-y-1.5"><label htmlFor={id} className="block text-sm font-medium">{label}</label>{children(id)}</div>;}
@@ -26,7 +26,7 @@ export function RefundManagement({mode="new"}){
  return <Shell mode={mode}>{!allowed?<BillingError error="You do not have permission to access this refund page."/>:mode==="new"?<NewRefund permissions={permissions}/>:<RefundList mode={mode}/>}</Shell>;
 }
 function NewRefund({permissions}){
- const available=Object.keys(sources).filter(s=>permissions.includes(s==="ipd"?"inpatient.view":s==="lab"?"lab.view":"appointment.view"));
+ const available=Object.keys(sources).filter(s=>permissions.includes(s==="lab"?"lab.view":"appointment.view"));
  const [source,setSource]=useState(available[0]||"opd"),[input,setInput]=useState(""),[patient,setPatient]=useState(""),[page,setPage]=useState(1),[selected,setSelected]=useState(null),[notice,setNotice]=useState("");
  const query=useRefundBillsQuery({source,patient,page},{...queryOptions,skip:!patient||!available.includes(source)}),data=query.currentData?.data;
  return <><form className="rounded-xl border bg-card p-5" onSubmit={e=>{e.preventDefault();const value=input.trim();if(!value)return;setNotice("");setPage(1);if(value===patient&&page===1)query.refetch();setPatient(value);}}><div className="flex flex-wrap items-end gap-3"><div className="w-full sm:w-44"><Field label="Fee type">{id=><Select id={id} value={source} onChange={e=>{setSource(e.target.value);setPatient("");setPage(1);setNotice("");}}>{available.map(key=><option value={key} key={key}>{sources[key]}</option>)}</Select>}</Field></div><div className="min-w-48 flex-1"><Field label="Patient ID / MRN">{id=><Input id={id} value={input} maxLength={100} required autoComplete="off" placeholder="Enter patient ID or MRN" onChange={e=>setInput(e.target.value)}/>}</Field></div><Button className={primary} type="submit" disabled={!input.trim()||query.isFetching||!available.length}><Search className="mr-2 h-4 w-4"/>Search bills</Button>{patient&&<Button variant="outline" onClick={()=>{setPatient("");setInput("");setNotice("");}}>Clear</Button>}</div>{source==="opd"&&<p className="mt-3 text-xs text-muted-foreground">OPD is the doctor fee. Confirmed doctor fees are refunded in full.</p>}</form>

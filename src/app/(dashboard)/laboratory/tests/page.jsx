@@ -1,3 +1,2 @@
-import { LabCatalog } from "@/features/laboratory/LabCatalog";
-export const metadata={title:"Laboratory Test Catalog"};
-export default function Page(){return <LabCatalog />;}
+import {redirect} from "next/navigation";
+export default function Page(){redirect("/diagnostic/pathology-tests");}
